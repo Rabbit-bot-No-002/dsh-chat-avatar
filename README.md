@@ -4,6 +4,9 @@
 
 An avatar plugin for the DeepSeek Harness Web UI: one avatar on the left of each turn's final AI reply, one on the right of each of your messages.
 
+[![npm version](https://img.shields.io/npm/v/dsh-chat-avatar.svg)](https://www.npmjs.com/package/dsh-chat-avatar)
+[![license](https://img.shields.io/npm/l/dsh-chat-avatar.svg)](LICENSE)
+
 ![圆形头像框](assets/avatar-circle.webp)
 
 ![方形头像框](assets/avatar-square.webp)
@@ -21,14 +24,19 @@ An avatar plugin for the DeepSeek Harness Web UI: one avatar on the left of each
 ## 安装 / Install
 
 ```bash
-# 从 GitHub
+# 从 npm 安装（推荐：包已预构建，免 allowBuilds 授权）
+dsh plugin --profile web add dsh-chat-avatar
+
+# 从 GitHub 安装（源码安装，会本地跑一次构建）
 dsh plugin --profile web add github:Rabbit-bot-No-002/dsh-chat-avatar
 
 # 从本地目录
 dsh plugin --profile web add link:/path/to/dsh-chat-avatar
 ```
 
-装好后刷新页面。
+npm 包页面：<https://www.npmjs.com/package/dsh-chat-avatar>
+
+装好后刷新页面；如果是从 GitHub 源码安装且 pnpm 拦了构建脚本，按提示把该包加入 profile 的 `allowBuilds` 再重跑安装。
 
 ## License
 

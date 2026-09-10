@@ -4,9 +4,9 @@
 
 An avatar plugin for the DeepSeek Harness Web UI: one avatar on the left of each turn's final AI reply, one on the right of each of your messages.
 
-![圆形](https://zline.intmarch.com/u/firefox_3FOtd4ZNV7.webp)
+![圆形头像框](assets/avatar-circle.webp)
 
-![方形](https://zline.intmarch.com/u/firefox_Zv5pyFTMnM.webp)
+![方形头像框](assets/avatar-square.webp)
 
 
 ## 功能 / Features

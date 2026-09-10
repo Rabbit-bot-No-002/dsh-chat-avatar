@@ -1,0 +1,6 @@
+# dsh-chat-avatar bundle 层：把插件行插进 profile 组装树。
+# 安装：dsh plugin --profile web add link:/home/armin/workspace/dsh-chat-avatar
+- insert:
+    - id: dsh-chat-avatar
+      name: dsh-chat-avatar
+      config: {}

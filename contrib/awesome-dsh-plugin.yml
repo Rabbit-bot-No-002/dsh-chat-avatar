@@ -1,0 +1,11 @@
+# 投稿用条目：复制到 awesome-dsh-plugin 仓库的
+#   data/plugins/Rabbit-bot-No-002__dsh-chat-avatar.yml
+# 一个文件即全部投稿；READMEs 由脚本生成，不要手改。
+# 注意：该仓库要求目标仓库「创建满 1 天」后 PR 才会被自动检查通过。
+url: https://github.com/Rabbit-bot-No-002/dsh-chat-avatar
+name: Rabbit-bot-No-002/dsh-chat-avatar
+category: ui
+description:
+  en: Adds an avatar to the left of each turn's final AI reply and to the right of each user message; upload your own image and set its size and circle or square frame.
+  zh: 在每轮 AI 回复左侧与你的每条输入右侧各显示一个头像，可上传自己的图片并设置尺寸与圆形/方形头像框。
+tarball: https://github.com/Rabbit-bot-No-002/dsh-chat-avatar/releases/latest/download/dsh-chat-avatar.tgz

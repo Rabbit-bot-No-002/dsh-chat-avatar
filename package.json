@@ -1,0 +1,71 @@
+{
+  "name": "dsh-chat-avatar",
+  "version": "0.1.0",
+  "description": "DSH Web 头像插件：在每轮 AI 回复左侧与你的每条输入右侧各显示一个头像，可上传、调尺寸、选圆形或方形框。",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "avatar",
+    "ui"
+  ],
+  "type": "module",
+  "license": "MIT",
+  "author": "Rabbit-bot-No-002",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Rabbit-bot-No-002/dsh-chat-avatar.git"
+  },
+  "homepage": "https://github.com/Rabbit-bot-No-002/dsh-chat-avatar#readme",
+  "bugs": {
+    "url": "https://github.com/Rabbit-bot-No-002/dsh-chat-avatar/issues"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "main": "./lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "default": "./lib/client.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [],
+      "platform": "web"
+    }
+  },
+  "scripts": {
+    "build": "tsdown",
+    "watch": "tsdown --watch",
+    "prepare": "tsdown",
+    "prepublishOnly": "npm run build && npm test",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.client.json --noEmit",
+    "test": "tsc -p tsconfig.test.json && node --test \"build-test/tests/*.test.js\"",
+    "smoke": "node scripts/smoke-host.mjs",
+    "pack:tgz": "npm run build && node -e \"const fs=require('fs');fs.rmSync('dist',{recursive:true,force:true});fs.mkdirSync('dist',{recursive:true})\" && npm pack --pack-destination dist && node -e \"const fs=require('fs');const f=fs.readdirSync('dist').find(n=>n.endsWith('.tgz'));fs.renameSync('dist/'+f,'dist/dsh-chat-avatar.tgz');console.log('dist/dsh-chat-avatar.tgz')\""
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "@types/react": "^18.3.12",
+    "tsdown": "^0.22.14",
+    "typescript": "^5.9.3"
+  }
+}

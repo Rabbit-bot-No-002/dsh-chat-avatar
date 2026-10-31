@@ -2,17 +2,17 @@
  * Client 半状态：设置缓存、按种类的头像版本号与可用性、Host 通信、订阅通知。
  * 全部可变状态私有于本模块；notify 同时驱动 DOM 层同步（layerSync）。
  */
-import { DEFAULT_SETTINGS, sanitizeSettings, type KindSettings, type Settings } from '../pure/settings.js'
+import { DEFAULT_SETTINGS, sanitizeSettings, type AiSettings, type KindSettings, type Settings } from '../pure/settings.js'
 import type { AvatarKind } from '../pure/avatars.js'
 
-export type { Settings, KindSettings }
+export type { Settings, KindSettings, AiSettings }
 
 /** Host 路由前缀。 */
 export const API = '/dsh-chat-avatar'
 
 export type SettingsPatch = {
   plugin?: Partial<{ enabled: boolean }>
-  ai?: Partial<KindSettings>
+  ai?: Partial<AiSettings>
   user?: Partial<KindSettings>
 }
 

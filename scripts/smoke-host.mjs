@@ -100,9 +100,19 @@ check('非回环 Host 403', r.status === 403)
 r = await call('/dsh-chat-avatar/settings', { host: '127.0.0.1:3080', origin: 'http://evil.example.com' })
 check('跨站 Origin 403', r.status === 403)
 
-// 10) 设置落盘
+// 10) 昵称与运行中显示：净化 + 回读
+r = await call('/dsh-chat-avatar/settings', { method: 'POST', body: JSON.stringify({ ai: { name: '  AI   助手 ', showRunning: false }, user: { name: '阿水' } }) })
+let named = JSON.parse(r.body.toString()).settings
+check('POST /settings 昵称折叠空白', named.ai.name === 'AI 助手' && named.user.name === '阿水')
+check('POST /settings showRunning=false 保留', named.ai.showRunning === false)
+r = await call('/dsh-chat-avatar/settings')
+named = JSON.parse(r.body.toString()).settings
+check('GET /settings 回读昵称与运行中开关', named.ai.name === 'AI 助手' && named.ai.showRunning === false)
+
+// 11) 设置落盘
 const stored = JSON.parse(readFileSync('/tmp/dsh-chat-avatar-smoke/dsh-chat-avatar/settings.json', 'utf8'))
 check('settings.json 落盘且无旧节', stored.ai.avatarSize === 128 && stored.ui === undefined)
+check('settings.json 含昵称与运行中开关', stored.ai.name === 'AI 助手' && stored.ai.showRunning === false && stored.user.name === '阿水')
 
 const failed = results.filter(([, ok]) => !ok)
 console.log(`\n共 ${results.length} 项，失败 ${failed.length} 项`)

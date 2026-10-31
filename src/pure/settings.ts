@@ -12,17 +12,27 @@ export type AvatarShape = 'circle' | 'square'
 
 export const AVATAR_SHAPES: readonly AvatarShape[] = ['circle', 'square']
 
+/** 昵称长度上限（按 Unicode 码点计，不会把 emoji 截成半个）。 */
+export const NAME_MAX = 24
+
 export interface KindSettings {
   showAvatar: boolean
   /** 自定义图片绝对路径；空串表示用数据目录里的上传图。 */
   avatarPath: string
   avatarSize: number
   shape: AvatarShape
+  /** 昵称：非空时显示在头像旁；空串＝不显示昵称（默认，保持升级后外观不变）。 */
+  name: string
+}
+
+export interface AiSettings extends KindSettings {
+  /** 生成过程中也显示头像（贴「运行中」状态行）；默认开。 */
+  showRunning: boolean
 }
 
 export interface Settings {
   plugin: { enabled: boolean }
-  ai: KindSettings
+  ai: AiSettings
   user: KindSettings
 }
 
@@ -34,19 +44,50 @@ export function isAvatarShape(value: unknown): value is AvatarShape {
   return value === 'circle' || value === 'square'
 }
 
+/**
+ * 昵称净化：折叠连续空白、去首尾空白、按码点截到 NAME_MAX。
+ * 非字符串（含缺失）回落 `fallback`，因此「非法或缺失沿用当前值」的合并在昵称上同样成立。
+ */
+export function sanitizeName(value: unknown, fallback: string): string {
+  if (typeof value !== 'string') return fallback
+  return Array.from(value.replace(/\s+/g, ' ').trim()).slice(0, NAME_MAX).join('')
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
+}
+
 function pickKind(value: unknown, fallback: KindSettings): KindSettings {
-  const raw = value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
+  const raw = asRecord(value)
   return {
     showAvatar: typeof raw.showAvatar === 'boolean' ? raw.showAvatar : fallback.showAvatar,
     avatarPath: typeof raw.avatarPath === 'string' ? raw.avatarPath : fallback.avatarPath,
     avatarSize: clampSize(raw.avatarSize ?? fallback.avatarSize),
     shape: isAvatarShape(raw.shape) ? raw.shape : fallback.shape,
+    name: sanitizeName(raw.name, fallback.name),
   }
 }
 
-const DEFAULT_KIND: KindSettings = { showAvatar: true, avatarPath: '', avatarSize: DEFAULT_AVATAR_SIZE, shape: 'circle' }
+/** AI 侧多一个 `showRunning`；其余字段与用户侧共用同一套净化。 */
+function pickAi(value: unknown, fallback: AiSettings): AiSettings {
+  const raw = asRecord(value)
+  return {
+    ...pickKind(value, fallback),
+    showRunning: typeof raw.showRunning === 'boolean' ? raw.showRunning : fallback.showRunning,
+  }
+}
 
-export const DEFAULT_SETTINGS: Settings = { plugin: { enabled: true }, ai: DEFAULT_KIND, user: DEFAULT_KIND }
+const DEFAULT_KIND: KindSettings = {
+  showAvatar: true,
+  avatarPath: '',
+  avatarSize: DEFAULT_AVATAR_SIZE,
+  shape: 'circle',
+  name: '',
+}
+
+const DEFAULT_AI: AiSettings = { ...DEFAULT_KIND, showRunning: true }
+
+export const DEFAULT_SETTINGS: Settings = { plugin: { enabled: true }, ai: DEFAULT_AI, user: DEFAULT_KIND }
 
 /** 尺寸钳到 16–128；非法值回落默认。 */
 export function clampSize(n: unknown): number {
@@ -60,11 +101,11 @@ export function clampSize(n: unknown): number {
  * 对同一输入幂等；`current` 传 DEFAULT_SETTINGS 即为「读文件」路径。
  */
 export function sanitizeSettings(patch: unknown, current: Settings): Settings {
-  const p = patch && typeof patch === 'object' ? (patch as Record<string, unknown>) : {}
-  const plugin = p.plugin && typeof p.plugin === 'object' ? (p.plugin as Record<string, unknown>) : {}
+  const p = asRecord(patch)
+  const plugin = asRecord(p.plugin)
   return {
     plugin: { enabled: typeof plugin.enabled === 'boolean' ? plugin.enabled : current.plugin.enabled },
-    ai: pickKind(p.ai, current.ai),
+    ai: pickAi(p.ai, current.ai),
     user: pickKind(p.user, current.user),
   }
 }

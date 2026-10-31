@@ -5,8 +5,10 @@ import {
   AVATAR_MIN,
   DEFAULT_AVATAR_SIZE,
   DEFAULT_SETTINGS,
+  NAME_MAX,
   clampSize,
   isAvatarShape,
+  sanitizeName,
   sanitizeSettings,
   type Settings,
 } from '../src/pure/settings.js'
@@ -20,6 +22,10 @@ test('默认值：两侧头像 + 插件开关', () => {
   assert.equal(DEFAULT_SETTINGS.user.avatarSize, DEFAULT_AVATAR_SIZE)
   assert.equal(DEFAULT_SETTINGS.ai.shape, 'circle')
   assert.equal(DEFAULT_SETTINGS.user.shape, 'circle')
+  // 昵称默认空（不显示）；运行中显示默认开（生成过程中也能看到头像）
+  assert.equal(DEFAULT_SETTINGS.ai.name, '')
+  assert.equal(DEFAULT_SETTINGS.user.name, '')
+  assert.equal(DEFAULT_SETTINGS.ai.showRunning, true)
 })
 
 test('isAvatarShape：只认 circle / square', () => {
@@ -35,6 +41,36 @@ test('clampSize：区间与非法值', () => {
   assert.equal(clampSize(40.4), 40)
   assert.equal(clampSize('abc'), DEFAULT_AVATAR_SIZE)
   assert.equal(clampSize(Number.NaN), DEFAULT_AVATAR_SIZE)
+})
+
+test('sanitizeName：折叠空白、按码点截断、非字符串回落', () => {
+  assert.equal(sanitizeName('  阿  水  ', ''), '阿 水')
+  assert.equal(sanitizeName('AI\u3000助手', ''), 'AI 助手') // 全角空格同样折叠
+  assert.equal(sanitizeName(123, '默认'), '默认')
+  assert.equal(sanitizeName(undefined, '默认'), '默认')
+  assert.equal(sanitizeName('', '默认'), '')
+  assert.equal(Array.from(sanitizeName('名'.repeat(NAME_MAX + 5), '')).length, NAME_MAX)
+  // emoji 按码点截断：不会留下半个代理对
+  const emoji = '🙂'.repeat(NAME_MAX + 2)
+  const cut = sanitizeName(emoji, '')
+  assert.equal(Array.from(cut).length, NAME_MAX)
+  assert.equal(cut, '🙂'.repeat(NAME_MAX))
+})
+
+test('sanitizeSettings：昵称与运行中显示', () => {
+  const next = sanitizeSettings({
+    ai: { name: '  AI   助手 ', showRunning: false },
+    user: { name: '阿水' },
+  }, DEFAULT_SETTINGS)
+  assert.equal(next.ai.name, 'AI 助手')
+  assert.equal(next.ai.showRunning, false)
+  assert.equal(next.user.name, '阿水')
+  // 用户侧没有运行中开关：未知字段丢弃
+  assert.equal('showRunning' in next.user, false)
+  // 非法类型沿用当前值
+  const kept = sanitizeSettings({ ai: { name: 42, showRunning: 'yes' } }, next)
+  assert.equal(kept.ai.name, 'AI 助手')
+  assert.equal(kept.ai.showRunning, false)
 })
 
 test('sanitizeSettings：非法类型回落、未知字段丢弃', () => {
@@ -59,7 +95,10 @@ test('sanitizeSettings：非法类型回落、未知字段丢弃', () => {
   assert.equal(next.ai.shape, 'circle') // 非法形状回落 current
   assert.equal(next.user.shape, 'square')
   assert.deepEqual(Object.keys(next).sort(), ['ai', 'plugin', 'user'])
-  assert.deepEqual(Object.keys(next.ai).sort(), ['avatarPath', 'avatarSize', 'shape', 'showAvatar'])
+  assert.deepEqual(Object.keys(next.ai).sort(),
+    ['avatarPath', 'avatarSize', 'name', 'shape', 'showAvatar', 'showRunning'])
+  assert.deepEqual(Object.keys(next.user).sort(),
+    ['avatarPath', 'avatarSize', 'name', 'shape', 'showAvatar'])
 })
 
 test('sanitizeSettings：合法 patch 生效', () => {

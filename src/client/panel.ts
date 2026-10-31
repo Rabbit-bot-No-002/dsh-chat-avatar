@@ -19,7 +19,9 @@ import {
   AVATAR_MAX,
   AVATAR_MIN,
   AVATAR_SHAPES,
+  NAME_MAX,
   clampSize,
+  type AiSettings,
   type AvatarShape,
   type KindSettings,
 } from '../pure/settings.js'
@@ -55,7 +57,7 @@ interface CardProps {
   kind: AvatarKind
   title: string
   hint: string
-  config: KindSettings
+  config: AiSettings | KindSettings
   onStatus: (message: string) => void
 }
 
@@ -65,9 +67,9 @@ function AvatarCard({ kind, title, hint, config, onStatus }: CardProps) {
   const size = clampSize(config.avatarSize)
 
   /** 只提交这一侧的字段，其余沿用当前值。 */
-  const patch = (next: Partial<KindSettings>): void => {
+  const patch = (next: Partial<AiSettings>): void => {
     const merged = { ...config, ...next }
-    saveSettings(kind === 'ai' ? { ai: merged } : { user: merged })
+    saveSettings(kind === 'ai' ? { ai: merged as AiSettings } : { user: merged })
   }
 
   const onFile = (e: ChangeEvent<HTMLInputElement>): void => {
@@ -110,6 +112,24 @@ function AvatarCard({ kind, title, hint, config, onStatus }: CardProps) {
     h(Row, { label: '显示头像', hint: config.showAvatar ? '当前显示' : '当前隐藏' },
       h(Toggle, { checked: config.showAvatar, onChange: (v) => patch({ showAvatar: v }) }),
     ),
+    h(Row, { label: '昵称', hint: '显示在头像旁；留空＝不显示' },
+      h('input', {
+        className: 'dsh-av-text',
+        type: 'text',
+        placeholder: '留空＝不显示',
+        defaultValue: config.name,
+        maxLength: NAME_MAX,
+        onChange: (e: ChangeEvent<HTMLInputElement>) => patch({ name: e.target.value }),
+      }),
+    ),
+    kind === 'ai'
+      ? h(Row, { label: '运行中显示', hint: '生成过程中贴在「运行中」状态行左侧' },
+          h(Toggle, {
+            checked: (config as AiSettings).showRunning !== false,
+            onChange: (v) => patch({ showRunning: v }),
+          }),
+        )
+      : null,
     h(Row, { label: '上传图片', hint: 'PNG / JPG / WebP / GIF，≤ 20MB' },
       h('span', { className: 'dsh-av-btn', onClick: () => fileRef.current?.click() }, '选择图片'),
       h('input', {
@@ -153,7 +173,7 @@ export function AvatarPanel(): any {
     h(AvatarCard, {
       kind: 'ai',
       title: 'AI 头像',
-      hint: '显示在每轮最终 AI 回复的左侧',
+      hint: '显示在每轮最终 AI 回复左侧；生成中贴在「运行中」状态行旁',
       config: settings.ai,
       onStatus: setStatus,
     }),

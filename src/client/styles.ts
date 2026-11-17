@@ -57,5 +57,26 @@ export const STYLES = `
 .dsh-av-toggle input:checked + .track{background:var(--dsw-alias-brand-primary,#4a9eff);border-color:transparent}
 .dsh-av-toggle input:checked + .track::after{left:18px}
 .dsh-av-toggle input:focus-visible + .track{outline:2px solid var(--dsw-alias-brand-primary,#4a9eff);outline-offset:2px}
+/* ── 会话专属头像列表 ── */
+.dsh-av-slots{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+.dsh-av-slot{display:grid;grid-template-columns:36px minmax(0,1fr) auto;align-items:center;gap:10px;
+  padding:8px 10px;border-radius:8px;
+  border:1px solid var(--dsw-alias-border-l3,rgba(128,128,128,.28));background:transparent}
+.dsh-av-slot-main{min-width:0;display:flex;flex-direction:column;gap:3px}
+.dsh-av-input{width:100%;max-width:none;min-width:0;padding:3px 8px;border-radius:6px;font-size:11px !important;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace !important;letter-spacing:-0.1px;
+  line-height:18px;background:transparent;color:var(--dsw-alias-label-primary,#ddd);
+  border:1px solid var(--dsw-alias-border-l3,rgba(128,128,128,.28))}
+.dsh-av-input:focus-visible{outline:1px solid var(--dsw-alias-brand-primary,#4a9eff);outline-offset:0}
+.dsh-av-preview-sm{margin-left:0;width:36px;height:36px;flex:none}
+.dsh-av-slot-hint{font-size:11px;color:var(--dsw-alias-label-tertiary,#888);word-break:break-all}
+.dsh-av-session-id{font-size:12px;color:var(--dsw-alias-label-secondary,#999);overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.dsh-av-slot-actions{display:flex;align-items:center;gap:6px;flex:none}
+.dsh-av-danger:hover{border-color:var(--dsw-alias-state-error-primary,#e05252);color:var(--dsw-alias-state-error-primary,#e05252)}
+.dsh-av-btn-block{width:100%;justify-content:center;border-style:dashed}
+.dsh-av-add{margin-top:10px;width:100%;justify-content:center;border-style:dashed}
+
+/* ── 设置面板的状态行 ── */
 .dsh-av-status{font-size:12px;color:var(--dsw-alias-state-error-primary,#e05252);min-height:16px}
 `

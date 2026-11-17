@@ -10,6 +10,7 @@ import {
   sanitizeSettings,
   type Settings,
 } from '../src/pure/settings.js'
+import { MAX_SESSION_AVATARS } from '../src/pure/avatars.js'
 
 test('默认值：两侧头像 + 插件开关', () => {
   assert.equal(DEFAULT_SETTINGS.plugin.enabled, true)
@@ -59,7 +60,8 @@ test('sanitizeSettings：非法类型回落、未知字段丢弃', () => {
   assert.equal(next.ai.shape, 'circle') // 非法形状回落 current
   assert.equal(next.user.shape, 'square')
   assert.deepEqual(Object.keys(next).sort(), ['ai', 'plugin', 'user'])
-  assert.deepEqual(Object.keys(next.ai).sort(), ['avatarPath', 'avatarSize', 'shape', 'showAvatar'])
+  // ai 比 user 多一份 sessionAvatars（会话专属头像表）
+  assert.deepEqual(Object.keys(next.ai).sort(), ['avatarPath', 'avatarSize', 'sessionAvatars', 'shape', 'showAvatar'])
 })
 
 test('sanitizeSettings：合法 patch 生效', () => {
@@ -92,4 +94,38 @@ test('空输入是恒等变换（且对同一输入幂等）', () => {
   assert.deepEqual(sanitizeSettings(null, DEFAULT_SETTINGS), DEFAULT_SETTINGS)
   const once = sanitizeSettings({ ai: { avatarSize: 999 } }, DEFAULT_SETTINGS)
   assert.deepEqual(sanitizeSettings(once, DEFAULT_SETTINGS), once)
+})
+
+test('sessionAvatars：非法 slot 丢弃、重复 slot 只留第一条', () => {
+  const next = sanitizeSettings({
+    ai: {
+      sessionAvatars: [
+        { slot: 'ok1', sessionId: 'session-a' },
+        { slot: 'BAD SLOT', sessionId: 'session-b' }, // 大写与空格都不合法
+        { slot: '', sessionId: 'session-c' },
+        { slot: 'ok1', sessionId: 'session-dup' }, // 同 slot 重复
+        { slot: 'ok2' }, // 缺 sessionId → 空串
+        'not-an-object',
+      ],
+    },
+  }, DEFAULT_SETTINGS)
+  assert.deepEqual(next.ai.sessionAvatars, [
+    { slot: 'ok1', sessionId: 'session-a' },
+    { slot: 'ok2', sessionId: '' },
+  ])
+})
+
+test('sessionAvatars：超过上限截断、sessionId 裁到 200', () => {
+  const many = Array.from({ length: MAX_SESSION_AVATARS + 5 }, (_, i) => ({ slot: 's' + i, sessionId: 'x'.repeat(500) }))
+  const next = sanitizeSettings({ ai: { sessionAvatars: many } }, DEFAULT_SETTINGS)
+  assert.equal(next.ai.sessionAvatars.length, MAX_SESSION_AVATARS)
+  assert.equal(next.ai.sessionAvatars[0].sessionId.length, 200)
+})
+
+test('sessionAvatars：user 侧不受影响、非数组沿用 current', () => {
+  const withSlots = sanitizeSettings({ ai: { sessionAvatars: [{ slot: 'sa', sessionId: 'session-a' }] } }, DEFAULT_SETTINGS)
+  assert.equal(withSlots.ai.sessionAvatars.length, 1)
+  assert.equal((withSlots.user as any).sessionAvatars, undefined)
+  const kept = sanitizeSettings({ ai: { sessionAvatars: 'nope' } }, withSlots)
+  assert.deepEqual(kept.ai.sessionAvatars, withSlots.ai.sessionAvatars)
 })

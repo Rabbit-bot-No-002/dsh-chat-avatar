@@ -17,13 +17,16 @@ import {
   MAX_UPLOAD_BYTES,
   avatarFileNames,
   avatarFileStem,
+  avatarSlotFileNames,
+  avatarSlotStem,
   contentTypeForExt,
+  isAvatarSlot,
   isAvatarKind,
   isSupportedExt,
   parseImageDataUrl,
   type AvatarKind,
 } from './pure/avatars.js'
-import { DEFAULT_SETTINGS, sanitizeSettings, type Settings } from './pure/settings.js'
+import { DEFAULT_SETTINGS, sanitizeSettings, type SessionAvatar, type Settings } from './pure/settings.js'
 
 const DATA_DIR = join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'dsh-chat-avatar')
 const DATA_DIR_ABS = resolve(DATA_DIR)
@@ -124,6 +127,9 @@ function writeSettings(next: Settings): void {
 /** 数据目录里该种类的所有候选文件（按扩展名优先级）。 */
 const avatarFilePaths = (kind: AvatarKind): string[] => avatarFileNames(kind).map((name) => join(DATA_DIR, name))
 
+/** 某个会话槽位的所有候选文件（按扩展名优先级）。 */
+const avatarSlotFilePaths = (slot: string): string[] => avatarSlotFileNames(slot).map((name) => join(DATA_DIR, name))
+
 /**
  * 该种类实际要返回的文件：settings[kind].avatarPath（限数据目录内 + 受支持扩展名 + 存在）
  * → 数据目录里的上传图 → null（没有就什么都不显示；刻意没有内置默认图）。
@@ -138,9 +144,33 @@ function resolveAvatarPath(settings: Settings, kind: AvatarKind): string | null 
   return avatarFilePaths(kind).find((p) => existsSync(p)) ?? null
 }
 
+function sessionAvatarEntry(settings: Settings, slot: string): SessionAvatar | null {
+  return settings.ai.sessionAvatars.find((entry) => entry.slot === slot) ?? null
+}
+
+/**
+ * 会话专属头像的实际文件：槽位合法且已登记 → 该槽位的上传图；
+ * 否则（没传 slot、槽位不存在、槽位还没图）一律回退默认 AI 头像。
+ */
+function resolveSessionAvatarPath(settings: Settings, slot: string): string | null {
+  if (!isAvatarSlot(slot) || sessionAvatarEntry(settings, slot) === null) return resolveAvatarPath(settings, 'ai')
+  return avatarSlotFilePaths(slot).find((p) => existsSync(p)) ?? resolveAvatarPath(settings, 'ai')
+}
+
+interface Availability {
+  ai: boolean
+  user: boolean
+  /** 哪些槽位真的落过图：客户端据此决定预览显示「无」还是回退默认。 */
+  aiSlots: Record<string, boolean>
+}
+
 /** 两侧是否已有可用头像：客户端据此决定渲不渲染，避免出现空头像框。 */
-function avatarAvailability(settings: Settings): Record<AvatarKind, boolean> {
-  return { ai: resolveAvatarPath(settings, 'ai') !== null, user: resolveAvatarPath(settings, 'user') !== null }
+function avatarAvailability(settings: Settings): Availability {
+  const aiSlots: Record<string, boolean> = {}
+  for (const entry of settings.ai.sessionAvatars) {
+    if (avatarSlotFilePaths(entry.slot).some((p) => existsSync(p))) aiSlots[entry.slot] = true
+  }
+  return { ai: resolveAvatarPath(settings, 'ai') !== null, user: resolveAvatarPath(settings, 'user') !== null, aiSlots }
 }
 
 export function apply(ctx: AppContext): void {
@@ -167,7 +197,8 @@ export function apply(ctx: AppContext): void {
   on('/dsh-chat-avatar/avatar', (req, res) => {
     const kind = new URL(req.url ?? '/', 'http://localhost').searchParams.get('kind') ?? 'ai'
     if (!isAvatarKind(kind)) return sendJson(res, 400, { ok: false, error: 'invalid kind' })
-    const path = resolveAvatarPath(readSettings(), kind)
+    const slot = new URL(req.url ?? '/', 'http://localhost').searchParams.get('slot') ?? ''
+    const path = kind === 'ai' ? resolveSessionAvatarPath(readSettings(), slot) : resolveAvatarPath(readSettings(), kind)
     if (path === null) return send(res, 404, 'avatar unavailable', TEXT_HEADERS)
     const bytes = readFileSync(path)
     // URL 带版本号（?v=N），上传后自增 → 可以长期缓存。
@@ -188,17 +219,27 @@ export function apply(ctx: AppContext): void {
 
   // ── 上传头像（dataUrl base64）──
   on('/dsh-chat-avatar/avatar-upload', async (req, res) => {
-    const { kind, dataUrl } = (await readJson(req)) ?? {}
+    const { kind, slot, dataUrl } = (await readJson(req)) ?? {}
     if (!isAvatarKind(kind)) throw new Error('invalid kind')
+    const slotGiven = typeof slot === 'string' && slot !== ''
+    if (slotGiven && (kind !== 'ai' || !isAvatarSlot(slot))) throw new Error('invalid slot')
     const parsed = parseImageDataUrl(dataUrl)
     if (parsed === null) throw new Error('invalid dataUrl')
     const bytes = Buffer.from(parsed.base64, 'base64')
     if (bytes.length === 0) throw new Error('empty image')
     if (bytes.length > MAX_UPLOAD_BYTES) throw Object.assign(new Error(`image exceeds ${MAX_UPLOAD_BYTES} bytes`), { statusCode: 413 })
-    // 同一种类的旧扩展名先清掉，避免两份文件互相遮蔽。
-    for (const old of avatarFilePaths(kind)) rmSync(old, { force: true })
-    writeFileSync(join(DATA_DIR, avatarFileStem(kind) + parsed.ext), bytes)
+    // 同一槽位/种类的旧扩展名先清掉，避免两份文件互相遮蔽。
+    for (const old of slotGiven ? avatarSlotFilePaths(slot) : avatarFilePaths(kind)) rmSync(old, { force: true })
+    writeFileSync(join(DATA_DIR, (slotGiven ? avatarSlotStem(slot) : avatarFileStem(kind)) + parsed.ext), bytes)
     sendJson(res, 200, { ok: true, ext: parsed.ext, available: avatarAvailability(readSettings()) })
+  })
+
+  // ── 删掉某个会话专属图片（条目由 settings 那一路删）──
+  on('/dsh-chat-avatar/avatar-remove', async (req, res) => {
+    const { kind, slot } = (await readJson(req)) ?? {}
+    if (kind !== 'ai' || !isAvatarSlot(slot)) throw new Error('invalid slot')
+    for (const old of avatarSlotFilePaths(slot)) rmSync(old, { force: true })
+    sendJson(res, 200, { ok: true, available: avatarAvailability(readSettings()) })
   })
 
   ctx.effect(() => () => {

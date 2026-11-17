@@ -6,6 +6,7 @@
  * Host 收到 POST 时的权威净化，以及 Client 收到响应后的浅合并
  * —— 两者语义相同（「有就用、非法或缺失就沿用当前值」），所以只留一个实现。
  */
+import { MAX_SESSION_AVATARS, isAvatarSlot } from './avatars.js'
 
 /** 头像框形状：圆形（默认）或方形。 */
 export type AvatarShape = 'circle' | 'square'
@@ -20,9 +21,20 @@ export interface KindSettings {
   shape: AvatarShape
 }
 
+/** 一条会话专属头像：槽位名进文件名，sessionId 决定它绑到哪个会话。 */
+export interface SessionAvatar {
+  slot: string
+  sessionId: string
+}
+
+/** AI 侧比用户侧多一份会话头像表。 */
+export interface AiKindSettings extends KindSettings {
+  sessionAvatars: SessionAvatar[]
+}
+
 export interface Settings {
   plugin: { enabled: boolean }
-  ai: KindSettings
+  ai: AiKindSettings
   user: KindSettings
 }
 
@@ -44,9 +56,35 @@ function pickKind(value: unknown, fallback: KindSettings): KindSettings {
   }
 }
 
+/**
+ * 会话专属头像条目净化：slot 必须合法且不重复，sessionId 允许暂时为空（面板上刚添还没填）。
+ * sessionId 重复不丢条目（解析时取第一条），避免编辑过程中行突然消失。
+ */
+function sanitizeSessionAvatars(value: unknown, fallback: SessionAvatar[]): SessionAvatar[] {
+  if (!Array.isArray(value)) return fallback
+  const out: SessionAvatar[] = []
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue
+    const raw = item as Record<string, unknown>
+    if (!isAvatarSlot(raw.slot)) continue
+    if (out.some((entry) => entry.slot === raw.slot)) continue
+    const sessionId = typeof raw.sessionId === 'string' ? raw.sessionId.trim().slice(0, 200) : ''
+    out.push({ slot: raw.slot, sessionId })
+    if (out.length >= MAX_SESSION_AVATARS) break
+  }
+  return out
+}
+
+function pickAiKind(value: unknown, fallback: AiKindSettings): AiKindSettings {
+  const raw = value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
+  return { ...pickKind(value, fallback), sessionAvatars: sanitizeSessionAvatars(raw.sessionAvatars, fallback.sessionAvatars) }
+}
+
 const DEFAULT_KIND: KindSettings = { showAvatar: true, avatarPath: '', avatarSize: DEFAULT_AVATAR_SIZE, shape: 'circle' }
 
-export const DEFAULT_SETTINGS: Settings = { plugin: { enabled: true }, ai: DEFAULT_KIND, user: DEFAULT_KIND }
+const DEFAULT_AI: AiKindSettings = { ...DEFAULT_KIND, sessionAvatars: [] }
+
+export const DEFAULT_SETTINGS: Settings = { plugin: { enabled: true }, ai: DEFAULT_AI, user: DEFAULT_KIND }
 
 /** 尺寸钳到 16–128；非法值回落默认。 */
 export function clampSize(n: unknown): number {
@@ -64,7 +102,7 @@ export function sanitizeSettings(patch: unknown, current: Settings): Settings {
   const plugin = p.plugin && typeof p.plugin === 'object' ? (p.plugin as Record<string, unknown>) : {}
   return {
     plugin: { enabled: typeof plugin.enabled === 'boolean' ? plugin.enabled : current.plugin.enabled },
-    ai: pickKind(p.ai, current.ai),
+    ai: pickAiKind(p.ai, current.ai),
     user: pickKind(p.user, current.user),
   }
 }

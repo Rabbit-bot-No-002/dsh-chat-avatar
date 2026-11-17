@@ -1,6 +1,6 @@
 {
   "name": "dsh-chat-avatar",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "DSH Web 头像插件：在每轮 AI 回复左侧与你的每条输入右侧各显示一个头像，可上传、调尺寸、选圆形或方形框。",
   "keywords": [
     "dsh",

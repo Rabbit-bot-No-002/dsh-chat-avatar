@@ -9,12 +9,14 @@ import {
   getAvatarVersion,
   getSettings,
   hasAvatar,
+  hasSlotAvatar,
   notify,
   saveSettings,
   setAvailability,
   subscribe,
   type Settings,
 } from './state.js'
+import { getLastSeenSessionId } from './dom-layer.js'
 import {
   AVATAR_MAX,
   AVATAR_MIN,
@@ -22,6 +24,7 @@ import {
   clampSize,
   type AvatarShape,
   type KindSettings,
+  type SessionAvatar,
 } from '../pure/settings.js'
 import type { AvatarKind } from '../pure/avatars.js'
 
@@ -146,6 +149,173 @@ function AvatarCard({ kind, title, hint, config, onStatus }: CardProps) {
   )
 }
 
+/** 新建槽位名：短、合法、不重复（时间戳 + 随机尾）。 */
+function newSlot(): string {
+  return 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
+}
+
+/** 只读展示用的版本号：没图时返回 null，预览显示「无」。 */
+function slotPreviewSrc(slot: string): string | null {
+  if (!hasSlotAvatar(slot)) return null
+  return `${API}/avatar?kind=ai&slot=${encodeURIComponent(slot)}&v=${getAvatarVersion('ai', slot)}`
+}
+
+interface SessionCardProps {
+  settings: Settings
+}
+
+/**
+ * 会话专属头像：按 session id 绑定，一进入某个会话就把默认 AI 头像换成这一张。
+ * 槽位名（slot）进文件名，session id 只用来匹配，所以改绑定不用重传图。
+ */
+function SessionAvatarCard({ settings }: SessionCardProps): any {
+  const entries = settings.ai.sessionAvatars
+  const [status, setStatus] = useState('')
+  const current = getLastSeenSessionId()
+
+  /** 整份替换条目表：Host 会重新净化（去重、限长、限量）。 */
+  const patch = (next: SessionAvatar[]): void => {
+    saveSettings({ ai: { ...settings.ai, sessionAvatars: next } })
+  }
+
+  const setSessionId = (slot: string, sessionId: string): void => {
+    patch(entries.map((entry) => (entry.slot === slot ? { slot, sessionId } : entry)))
+  }
+
+  const removeEntry = (slot: string): void => {
+    patch(entries.filter((entry) => entry.slot !== slot))
+    // 图也一起清掉：条目没了图留着只会占地方。
+    fetchJson('/avatar-remove', { method: 'POST', body: JSON.stringify({ kind: 'ai', slot }) })
+      .then((d) => { if (d && d.ok) { setAvailability(d.available); notify() } })
+      .catch(() => {})
+  }
+
+  const upload = (slot: string, file: File): void => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      fetchJson('/avatar-upload', { method: 'POST', body: JSON.stringify({ kind: 'ai', slot, dataUrl: reader.result }) })
+        .then((d) => {
+          if (d && d.ok) {
+            setAvailability(d.available)
+            bumpAvatarVersion('ai', slot)
+            setStatus('')
+            notify()
+          } else {
+            setStatus('上传失败：' + ((d && d.error) || '未知错误'))
+          }
+        })
+        .catch((err) => setStatus('上传失败：' + String(err)))
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const rows = entries.map((entry) => h(SessionAvatarRow, {
+    key: entry.slot,
+    entry,
+    shape: settings.ai.shape,
+    onStatus: setStatus,
+    onSessionId: setSessionId,
+    onRemove: removeEntry,
+    onUpload: upload,
+  }))
+
+  return h('div', { className: 'dsh-av-card' },
+    h('div', { className: 'dsh-av-card-head' },
+      h('div', null,
+        h('div', { className: 'dsh-av-card-title' }, '会话专属头像'),
+        h('div', { className: 'dsh-av-card-hint' }, '按 session id 绑定；匹配不到时用默认头像（可选）'),
+      ),
+    ),
+    h('div', { className: 'dsh-av-row' },
+      h('div', { style: { minWidth: 0 } },
+        h('div', { className: 'dsh-av-label' }, '当前会话'),
+        h('div', { className: 'dsh-av-session-id', title: current },
+          current === '' ? '还没看到会话，先打开一个对话' : current),
+      ),
+    ),
+    entries.length === 0
+      ? h('div', { className: 'dsh-av-hint' }, '还没有会话专属头像')
+      : h('div', { className: 'dsh-av-slots' }, rows),
+    h('div', { className: 'dsh-av-row' },
+      h('span', {
+        className: 'dsh-av-btn dsh-av-btn-block',
+        onClick: () => patch([...entries, { slot: newSlot(), sessionId: current }]),
+      }, '+ 添加会话头像'),
+    ),
+    h('div', { className: 'dsh-av-status' }, status),
+  )
+}
+
+interface SessionRowProps {
+  entry: SessionAvatar
+  shape: AvatarShape
+  onStatus: (message: string) => void
+  onSessionId: (slot: string, sessionId: string) => void
+  onRemove: (slot: string) => void
+  onUpload: (slot: string, file: File) => void
+}
+
+/** 一条会话头像：预览 + session id 输入 + 右侧操作按钮。 */
+function SessionAvatarRow({ entry, shape, onStatus, onSessionId, onRemove, onUpload }: SessionRowProps): any {
+  const fileRef = useRef<HTMLInputElement | null>(null)
+  const src = slotPreviewSrc(entry.slot)
+
+  return h('div', { className: 'dsh-av-slot' },
+    src !== null
+      ? h('img', { className: 'dsh-av-preview dsh-av-preview-sm', 'data-shape': shape, alt: '会话头像预览', src })
+      : h('div', { className: 'dsh-av-preview dsh-av-preview-sm dsh-av-preview-empty', 'data-shape': shape }, '无'),
+    h('div', { className: 'dsh-av-slot-main' },
+      h('input', {
+        className: 'dsh-av-input',
+        type: 'text',
+        value: entry.sessionId,
+        spellCheck: false,
+        title: entry.sessionId,
+        placeholder: 'session-…（点「填入当前」可自动填）',
+        style: {
+          boxSizing: 'border-box',
+          display: 'block',
+          width: '100%',
+          maxWidth: '340px',
+          minWidth: 0,
+          fontSize: '12px',
+          lineHeight: '18px',
+          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+          letterSpacing: '-0.2px',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+        },
+        onChange: (e: ChangeEvent<HTMLInputElement>) => onSessionId(entry.slot, e.target.value),
+      }),
+      h('div', { className: 'dsh-av-slot-hint' }, entry.sessionId === '' ? '还没填 sessionId，不会生效' : src !== null ? '已设置专属头像' : '未上传，回退默认头像'),
+    ),
+    h('div', { className: 'dsh-av-slot-actions' },
+      h('span', { className: 'dsh-av-btn', onClick: () => fileRef.current?.click() }, src !== null ? '更换' : '选择图片'),
+      h('span', {
+        className: 'dsh-av-btn',
+        onClick: () => {
+          const current = getLastSeenSessionId()
+          if (current === '') onStatus('当前没有打开的会话，先切到对话页再点')
+          else onSessionId(entry.slot, current)
+        },
+      }, '填入当前'),
+      h('span', { className: 'dsh-av-btn dsh-av-danger', onClick: () => onRemove(entry.slot) }, '删除'),
+      h('input', {
+        ref: fileRef,
+        type: 'file',
+        accept: 'image/png,image/jpeg,image/webp,image/gif',
+        style: { display: 'none' },
+        onChange: (e: ChangeEvent<HTMLInputElement>) => {
+          const file = e.target.files && e.target.files[0]
+          e.target.value = ''
+          if (file) onUpload(entry.slot, file)
+        },
+      }),
+    ),
+  )
+}
+
 export function AvatarPanel(): any {
   const settings = useSettings()
   const [status, setStatus] = useState('')
@@ -164,6 +334,7 @@ export function AvatarPanel(): any {
       config: settings.user,
       onStatus: setStatus,
     }),
+    h(SessionAvatarCard, { settings }),
     h('div', { className: 'dsh-av-card' },
       h(Row, { label: '启用插件', hint: '关闭后移除全部头像（设置保留）' },
         h(Toggle, {

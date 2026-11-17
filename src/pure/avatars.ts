@@ -27,6 +27,27 @@ export function avatarFileStem(kind: AvatarKind): string {
   return kind === 'ai' ? 'avatar-ai' : 'avatar-user'
 }
 
+/** 会话专属头像的槽位名：客户端生成的合法短标识，直接进文件名，故限定字符集。 */
+export const AVATAR_SLOT_RE = /^[a-z0-9][a-z0-9_-]{0,31}$/
+
+/** 单个会话头像最多挂多少条（防手滑刷爆设置文件）。 */
+export const MAX_SESSION_AVATARS = 20
+
+export function isAvatarSlot(value: unknown): value is string {
+  return typeof value === 'string' && AVATAR_SLOT_RE.test(value)
+}
+
+/** 会话专属头像的文件名主干：`avatar-ai-<slot>`（默认 AI 头像仍是 `avatar-ai`）。 */
+export function avatarSlotStem(slot: string): string {
+  return `avatar-ai-${slot}`
+}
+
+/** 该槽位所有允许的文件名（用于查找与清理旧扩展名）。 */
+export function avatarSlotFileNames(slot: string): string[] {
+  const stem = avatarSlotStem(slot)
+  return AVATAR_EXTS.map((ext) => stem + ext)
+}
+
 /** 该种类所有允许的文件名（用于查找与清理旧扩展名）。 */
 export function avatarFileNames(kind: AvatarKind): string[] {
   const stem = avatarFileStem(kind)

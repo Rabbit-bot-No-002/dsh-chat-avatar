@@ -6,7 +6,7 @@
  *   后续步骤出现即后移，整轮结束停在最终回答上）——一轮只有一个。
  * 随「启用」开关装卸；停用或隐藏时清空包裹层（不留空框）。
  */
-import { API, getAvatarVersion, getSettings, hasAvatar } from './state.js'
+import { avatarSrc, getSettings, hasAvatar, hasSlotAvatar, slotForSession } from './state.js'
 import { clampSize } from '../pure/settings.js'
 import type { AvatarKind } from '../pure/avatars.js'
 
@@ -20,6 +20,8 @@ const IMG = 'dsh-av-avatar'
 const DEBOUNCE_MS = 120
 
 let observer: MutationObserver | null = null
+/** 最近一次在对话 DOM 上看到的 sessionId（面板「填入当前会话」用）。 */
+let lastSeenSessionId = ''
 let timer: number | null = null
 let active = false
 
@@ -56,22 +58,41 @@ export function scheduleProcessRows(): void {
  */
 function decorate(kind: AvatarKind, rows: HTMLElement[]): void {
   const cfg = getSettings()[kind]
-  const live = cfg.showAvatar && hasAvatar(kind)
   const targets = new Set<HTMLElement>()
-  if (live) {
+  if (cfg.showAvatar) {
     const size = clampSize(cfg.avatarSize)
     for (const row of rows) {
+      const slot = kind === 'ai' ? slotForRow(row) : null
+      const src = avatarSrc(kind, slot)
+      if (src === null) continue // 这张脸没有可用的图（默认与槽位都没传），不贴空框
       targets.add(row)
       const img = ensureWrap(row, kind)
       img.style.width = img.style.height = size + 'px'
       img.dataset.shape = cfg.shape
-      img.src = `${API}/avatar?kind=${kind}&v=${getAvatarVersion(kind)}`
+      img.src = src
     }
   }
   document.querySelectorAll<HTMLElement>(`.${WRAP[kind]}`).forEach((wrap) => {
     const parent = wrap.parentElement
     if (!parent || !targets.has(parent)) wrap.remove()
   })
+}
+
+/** 该行所属会话的 sessionId（对话根节点带的 data 属性）；取不到返回空串。 */
+export function sessionIdOfRow(row: HTMLElement): string {
+  const host = row.closest('[data-conversation-session]')
+  const id = host?.getAttribute('data-conversation-session') ?? ''
+  if (id !== '') lastSeenSessionId = id
+  return id
+}
+
+export function slotForRow(row: HTMLElement): string | null {
+  return slotForSession(sessionIdOfRow(row))
+}
+
+/** 面板「填入当前会话」用：最近一次在对话里看到的 sessionId。 */
+export function getLastSeenSessionId(): string {
+  return lastSeenSessionId
 }
 
 /** 每轮一个 AI 头像：优先该轮最后一条有正文的 assistant-step，都没有正文时退回最后一条。 */
